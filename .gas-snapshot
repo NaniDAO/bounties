@@ -1,1 +1,6 @@
-BountyTest:testDeploy() (gas: 2377346)
+BountyTest:testBountyStatus() (gas: 343733)
+BountyTest:testCannotProposeExisting() (gas: 143204)
+BountyTest:testDeploy() (gas: 2523439)
+BountyTest:testFullLifecycle() (gas: 255162)
+BountyTest:testProposeBounty() (gas: 140819)
+BountyTest:testRequestBounty() (gas: 187008)

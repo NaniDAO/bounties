@@ -83,11 +83,31 @@ contract bounty is ERC721, Ownable {
         if (_bounty.status != Status.Approved) revert NotApproved();
         if (_bounty.watcher != msg.sender) revert NotWatcher();
         _bounty.status = Status.Completed;
-        transferFrom(_bounty.watcher, recipient, tokenId);
+        _transfer(address(0), ownerOf(tokenId), recipient, tokenId);
     }
 
     function read() public view returns (uint256[] memory) {
         return bounties;
+    }
+
+    function getBountiesByStatus(Status _status) public view returns (uint256[] memory) {
+        uint256 count;
+        for (uint256 i; i != bounties.length; ++i) {
+            if (requests[bounties[i]].status == _status) {
+                ++count;
+            }
+        }
+
+        uint256[] memory filtered = new uint256[](count);
+        uint256 index;
+        for (uint256 i; i != bounties.length; ++i) {
+            if (requests[bounties[i]].status == _status) {
+                filtered[index] = bounties[i];
+                ++index;
+            }
+        }
+
+        return filtered;
     }
 
     function tokenURI(uint256 tokenId) public view override(ERC721) returns (string memory) {
