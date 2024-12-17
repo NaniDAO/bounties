@@ -12,6 +12,7 @@ contract bounty is Ownable, ERC721 {
     using LibString for uint256;
 
     enum Status {
+        None,
         Pending,
         Rejected,
         Approved,
@@ -27,7 +28,6 @@ contract bounty is Ownable, ERC721 {
         address watcher;
     }
 
-    address constant NANI = 0x00000000000007C8612bA63Df8DdEfD9E6077c97;
     Bounty[] public bounties;
     mapping(uint256 tokenId => Bounty) public requests;
 
@@ -43,19 +43,29 @@ contract bounty is Ownable, ERC721 {
         return unicode"⌘";
     }
 
-    function pendingRequest(string calldata emojis, string calldata text) public returns (uint256 tokenId) {
+    function pendingRequest(string calldata emojis, string calldata text)
+        public
+        returns (uint256 tokenId)
+    {
         tokenId = uint256(keccak256(abi.encodePacked(emojis, text)));
-        Bounty memory _bounty = Bounty(emojis, text, NANI, 0, Status.Pending, owner());
+        if (requests[tokenId].status != Status.None) revert("!none");
+        Bounty memory _bounty = Bounty(emojis, text, address(0), 0, Status.Pending, owner());
         requests[tokenId] = _bounty;
         bounties.push(_bounty);
     }
 
-    function request(string calldata emojis, string calldata text, address token, uint256 amount, address watcher) public onlyOwner {
+    function request(
+        string calldata emojis,
+        string calldata text,
+        address token,
+        uint256 amount,
+        address watcher
+    ) public onlyOwner {
         uint256 tokenId = uint256(keccak256(abi.encodePacked(emojis, text)));
         _mint(watcher, tokenId);
         Bounty memory _bounty = Bounty(emojis, text, token, amount, Status.Approved, watcher);
         requests[tokenId] = _bounty;
-        bounties.push(_bounty);
+        if (requests[tokenId].status == Status.None) bounties.push(_bounty);
     }
 
     function reject(uint256 tokenId) public onlyOwner {
@@ -104,8 +114,11 @@ contract bounty is Ownable, ERC721 {
 
         for (uint256 i; i != words.length; ++i) {
             if (bytes(currentLine).length + bytes(words[i]).length + 1 > lineLength) {
-                wrappedText = string(abi.encodePacked(wrappedText, 
-                    '<tspan x="175" dy="1.2em">', currentLine, '</tspan>'));
+                wrappedText = string(
+                    abi.encodePacked(
+                        wrappedText, '<tspan x="175" dy="1.2em">', currentLine, "</tspan>"
+                    )
+                );
                 currentLine = words[i];
                 ++lineCount;
             } else {
@@ -115,8 +128,9 @@ contract bounty is Ownable, ERC721 {
                 currentLine = string(abi.encodePacked(currentLine, words[i]));
             }
         }
-        wrappedText = string(abi.encodePacked(wrappedText, 
-            '<tspan x="175" dy="1.2em">', currentLine, '</tspan>'));
+        wrappedText = string(
+            abi.encodePacked(wrappedText, '<tspan x="175" dy="1.2em">', currentLine, "</tspan>")
+        );
 
         // Calculate font size based on text length.
         uint256 fontSize = 12;
@@ -126,32 +140,38 @@ contract bounty is Ownable, ERC721 {
         return string(
             abi.encodePacked(
                 '<svg xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMinYMin meet" viewBox="0 0 350 350">',
-                '<style>',
-                '.base { fill: #00FFFF; }',
+                "<style>",
+                ".base { fill: #00FFFF; }",
                 '.title { font-family: "Copperplate Gothic", "Times New Roman", serif; font-size: 24px; font-weight: bold; }',
-                '.emoji { font-family: Arial, sans-serif; font-size: 32px; }',
+                ".emoji { font-family: Arial, sans-serif; font-size: 32px; }",
                 '.text { font-family: "Brush Script MT", "Lucida Calligraphy", cursive; font-style: italic; }',
-                '.border { fill: none; stroke: #00FFFF; stroke-width: 2; }',
-                '</style>',
+                ".border { fill: none; stroke: #00FFFF; stroke-width: 2; }",
+                "</style>",
                 '<rect width="100%" height="100%" fill="black" />',
                 '<rect x="10" y="10" width="330" height="330" class="border" />',
                 '<text x="175" y="100" class="base emoji" text-anchor="middle">',
                 _bounty.emojis,
-                '</text>',
+                "</text>",
                 '<text x="175" y="160" class="base text" text-anchor="middle" font-size="',
                 fontSize.toString(),
                 'px">',
                 wrappedText,
-                '</text>',
-                '</svg>'
+                "</text>",
+                "</svg>"
             )
         );
     }
 
-    function _split(string memory _base, string memory _delimiter) internal pure returns (string[] memory) {
+    function _split(string memory _base, string memory _delimiter)
+        internal
+        pure
+        returns (string[] memory)
+    {
         bytes memory baseBytes = bytes(_base);
         uint256 count = 1;
-        for (uint256 i; i != baseBytes.length; ++i) if (baseBytes[i] == bytes(_delimiter)[0]) ++count;
+        for (uint256 i; i != baseBytes.length; ++i) {
+            if (baseBytes[i] == bytes(_delimiter)[0]) ++count;
+        }
         string[] memory result = new string[](count);
         uint256 index;
         uint256 lastIndex;
@@ -166,7 +186,11 @@ contract bounty is Ownable, ERC721 {
         return result;
     }
 
-    function _substring(string memory _base, uint256 _start, uint256 _end) internal pure returns (string memory) {
+    function _substring(string memory _base, uint256 _start, uint256 _end)
+        internal
+        pure
+        returns (string memory)
+    {
         bytes memory _baseBytes = bytes(_base);
         bytes memory _result = new bytes(_end - _start);
         for (uint256 i = _start; i != _end; ++i) {
