@@ -15,4 +15,8 @@ contract BountyTest is Test {
         // vm.createSelectFork(vm.rpcUrl('arbi')); // Arbitrum EthL2 fork.
         _bounty = new bounty();
     }
+
+    function testDeploy() public payable {
+        new bounty();
+    }
 }

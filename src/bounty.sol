@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 pragma solidity ^0.8.19;
 
-import {Ownable} from "@solady/src/auth/Ownable.sol";
-import {ERC721} from "@solady/src/tokens/ERC721.sol";
-import {LibString} from "@solady/src/utils/LibString.sol";
 import {Base64} from "@solady/src/utils/Base64.sol";
+import {ERC721} from "@solady/src/tokens/ERC721.sol";
+import {Ownable} from "@solady/src/auth/Ownable.sol";
+import {LibString} from "@solady/src/utils/LibString.sol";
 
 /// @notice Simple NFT contract for minting bounties.
 /// @dev Emojis also used for people that can't read.
-contract bounty is Ownable, ERC721 {
+contract bounty is ERC721, Ownable {
     using LibString for uint256;
 
     enum Status {
@@ -20,19 +20,19 @@ contract bounty is Ownable, ERC721 {
     }
 
     struct Bounty {
-        string emojis;
-        string text;
-        address token;
-        uint256 amount;
-        Status status;
-        address watcher;
+        string emojis; // pictoral
+        string text; // basic gist
+        address token; // to grant
+        uint256 amount; // the sum
+        Status status; // id state
+        address watcher; // admins
     }
 
     uint256[] public bounties;
     mapping(uint256 tokenId => Bounty) public requests;
 
     constructor() payable {
-        _initializeOwner(msg.sender);
+        _initializeOwner(tx.origin); // Helps factory.
     }
 
     function name() public pure override(ERC721) returns (string memory) {
@@ -43,13 +43,15 @@ contract bounty is Ownable, ERC721 {
         return unicode"⌘";
     }
 
-    function pendingRequest(string calldata emojis, string calldata text)
+    error Exists();
+
+    function propose(string calldata emojis, string calldata text)
         public
         returns (uint256 tokenId)
     {
         tokenId = uint256(keccak256(abi.encodePacked(emojis, text)));
-        if (requests[tokenId].status != Status.None) revert("!none");
-        requests[tokenId] = Bounty(emojis, text, address(0), 0, Status.Pending, owner());;
+        if (requests[tokenId].status != Status.None) revert Exists();
+        requests[tokenId] = Bounty(emojis, text, address(0), 0, Status.Pending, owner());
         bounties.push(tokenId);
     }
 
@@ -59,22 +61,27 @@ contract bounty is Ownable, ERC721 {
         address token,
         uint256 amount,
         address watcher
-    ) public onlyOwner {
-        uint256 tokenId = uint256(keccak256(abi.encodePacked(emojis, text)));
+    ) public onlyOwner returns (uint256 tokenId) {
+        tokenId = uint256(keccak256(abi.encodePacked(emojis, text)));
         _mint(watcher, tokenId);
         requests[tokenId] = Bounty(emojis, text, token, amount, Status.Approved, watcher);
         if (requests[tokenId].status == Status.None) bounties.push(tokenId);
     }
 
+    error NotPending();
+
     function reject(uint256 tokenId) public onlyOwner {
-        if (requests[tokenId].status != Status.Pending) revert("!pending");
+        if (requests[tokenId].status != Status.Pending) revert NotPending();
         requests[tokenId].status = Status.Rejected;
     }
 
+    error NotApproved();
+    error NotWatcher();
+
     function complete(uint256 tokenId, address recipient) public {
         Bounty storage _bounty = requests[tokenId];
-        if (_bounty.status != Status.Approved) revert("!approved");
-        if (_bounty.watcher != msg.sender) revert("!watcher");
+        if (_bounty.status != Status.Approved) revert NotApproved();
+        if (_bounty.watcher != msg.sender) revert NotWatcher();
         _bounty.status = Status.Completed;
         transferFrom(_bounty.watcher, recipient, tokenId);
     }
