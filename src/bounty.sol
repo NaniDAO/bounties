@@ -28,7 +28,7 @@ contract bounty is Ownable, ERC721 {
         address watcher;
     }
 
-    Bounty[] public bounties;
+    uint256[] public bounties;
     mapping(uint256 tokenId => Bounty) public requests;
 
     constructor() payable {
@@ -49,9 +49,8 @@ contract bounty is Ownable, ERC721 {
     {
         tokenId = uint256(keccak256(abi.encodePacked(emojis, text)));
         if (requests[tokenId].status != Status.None) revert("!none");
-        Bounty memory _bounty = Bounty(emojis, text, address(0), 0, Status.Pending, owner());
-        requests[tokenId] = _bounty;
-        bounties.push(_bounty);
+        requests[tokenId] = Bounty(emojis, text, address(0), 0, Status.Pending, owner());;
+        bounties.push(tokenId);
     }
 
     function request(
@@ -63,9 +62,8 @@ contract bounty is Ownable, ERC721 {
     ) public onlyOwner {
         uint256 tokenId = uint256(keccak256(abi.encodePacked(emojis, text)));
         _mint(watcher, tokenId);
-        Bounty memory _bounty = Bounty(emojis, text, token, amount, Status.Approved, watcher);
-        requests[tokenId] = _bounty;
-        if (requests[tokenId].status == Status.None) bounties.push(_bounty);
+        requests[tokenId] = Bounty(emojis, text, token, amount, Status.Approved, watcher);
+        if (requests[tokenId].status == Status.None) bounties.push(tokenId);
     }
 
     function reject(uint256 tokenId) public onlyOwner {
@@ -81,7 +79,7 @@ contract bounty is Ownable, ERC721 {
         transferFrom(_bounty.watcher, recipient, tokenId);
     }
 
-    function read() public view returns (Bounty[] memory) {
+    function read() public view returns (uint256[] memory) {
         return bounties;
     }
 
