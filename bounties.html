@@ -1,0 +1,555 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Nani Bounties</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
+    <script
+      type="module"
+      src="https://cdn.jsdelivr.net/npm/emoji-picker-element@^1/index.js"
+    ></script>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+        background: #f0f0f0;
+      }
+      .container {
+        background: white;
+        padding: 20px;
+        border-radius: 10px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+      }
+      .button {
+        background: #00ffff;
+        border: none;
+        padding: 10px 20px;
+        border-radius: 5px;
+        cursor: pointer;
+        margin: 5px;
+      }
+      .button:disabled {
+        background: #cccccc;
+        cursor: not-allowed;
+      }
+      .input-group {
+        margin: 10px 20px;
+        width: calc(100% - 40px);
+      }
+      .input-group label {
+        display: block;
+        margin-bottom: 5px;
+      }
+      .input-group input,
+      .input-group textarea {
+        width: 100%;
+        padding: 8px;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+        resize: none;
+        height: 60px;
+      }
+      .bounty-list {
+        margin-top: 20px;
+      }
+      .bounty-item {
+        border: 1px solid #ddd;
+        padding: 10px;
+        margin: 10px 0;
+        border-radius: 4px;
+      }
+      .role-toggle {
+        margin: 20px 0;
+      }
+      .emoji-input-container {
+        position: relative;
+        display: flex;
+        align-items: center;
+      }
+      .emoji-trigger {
+        margin-left: 10px;
+        padding: 5px 10px;
+        cursor: pointer;
+        background: #f0f0f0;
+        border: 1px solid #ddd;
+        border-radius: 4px;
+      }
+      emoji-picker {
+        position: absolute;
+        z-index: 1;
+        display: none;
+        top: 100%;
+        left: 0;
+      }
+      .emoji-input-container input {
+        width: calc(100% - 60px);
+      }
+      .character-counter {
+        font-size: 0.8em;
+        color: #666;
+        text-align: right;
+        margin-top: 4px;
+      }
+      .token-address {
+        color: #666;
+        font-size: 0.9em;
+        margin-top: 4px;
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="container">
+      <h1>Nani Bounties</h1>
+      <button id="connectWallet" class="button">Connect Wallet</button>
+      <p id="walletAddress"></p>
+
+      <div class="role-toggle">
+        <input
+          type="radio"
+          id="proposer"
+          name="role"
+          value="proposer"
+          checked
+        />
+        <label for="proposer">Proposer</label>
+        <input type="radio" id="admin" name="role" value="admin" />
+        <label for="admin">Admin</label>
+      </div>
+
+      <div id="proposerForm">
+        <h2>Propose Bounty</h2>
+        <div class="input-group">
+          <label>Emojis (max 6):</label>
+          <div class="emoji-input-container">
+            <input type="text" id="proposeEmojis" maxlength="6" />
+            <button type="button" class="emoji-trigger">😀</button>
+            <emoji-picker style="display: none"></emoji-picker>
+          </div>
+        </div>
+        <div class="input-group">
+          <label>Description (max 50 characters):</label>
+          <textarea id="proposeText" maxlength="50"></textarea>
+          <div class="character-counter">
+            <span id="proposeTextCounter">0</span>/50
+          </div>
+        </div>
+        <button id="proposeButton" class="button">Propose Bounty</button>
+      </div>
+
+      <div id="adminForm" style="display: none">
+        <h2>Create Bounty</h2>
+        <div class="input-group">
+          <label>Emojis (max 6):</label>
+          <div class="emoji-input-container">
+            <input type="text" id="requestEmojis" maxlength="6" />
+            <button type="button" class="emoji-trigger">😀</button>
+            <emoji-picker style="display: none"></emoji-picker>
+          </div>
+        </div>
+        <div class="input-group">
+          <label>Description (max 50 characters):</label>
+          <textarea id="requestText" maxlength="50"></textarea>
+          <div class="character-counter">
+            <span id="requestTextCounter">0</span>/50
+          </div>
+        </div>
+        <div class="input-group">
+          <label>Token Address:</label>
+          <input
+            type="text"
+            id="tokenAddress"
+            value="0x00000000000007C8612bA63Df8DdEfD9E6077c97"
+            readonly
+          />
+          <div class="token-address">Using NANI token</div>
+        </div>
+        <div class="input-group">
+          <label>Amount:</label>
+          <input type="number" id="amount" min="0" step="1" />
+          <div class="token-address">Amount will be multiplied by 10^18</div>
+        </div>
+        <div class="input-group">
+          <label>Watcher Address:</label>
+          <input type="text" id="watcherAddress" />
+        </div>
+        <button id="requestButton" class="button">Create Bounty</button>
+      </div>
+
+      <div class="bounty-list">
+        <h2>Proposed Bounties</h2>
+        <div id="bountyContainer"></div>
+      </div>
+    </div>
+
+    <script type="module">
+      const { ethers } = window;
+
+      const CONTRACT_ADDRESS = "0x0000000000b2AF9d57d12F011591abE3F6CE50c0";
+      const NANI_TOKEN_ADDRESS = "0x00000000000007C8612bA63Df8DdEfD9E6077c97";
+      const CONTRACT_ABI = [
+        {
+          inputs: [
+            { internalType: "string", name: "emojis", type: "string" },
+            { internalType: "string", name: "text", type: "string" },
+          ],
+          name: "propose",
+          outputs: [
+            { internalType: "uint256", name: "tokenId", type: "uint256" },
+          ],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+        {
+          inputs: [
+            { internalType: "string", name: "emojis", type: "string" },
+            { internalType: "string", name: "text", type: "string" },
+            { internalType: "address", name: "token", type: "address" },
+            { internalType: "uint256", name: "amount", type: "uint256" },
+            { internalType: "address", name: "watcher", type: "address" },
+          ],
+          name: "request",
+          outputs: [
+            { internalType: "uint256", name: "tokenId", type: "uint256" },
+          ],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+        {
+          inputs: [
+            { internalType: "uint256", name: "tokenId", type: "uint256" },
+            { internalType: "address", name: "recipient", type: "address" },
+          ],
+          name: "complete",
+          outputs: [],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+        {
+          inputs: [],
+          name: "read",
+          outputs: [{ internalType: "uint256[]", name: "", type: "uint256[]" }],
+          stateMutability: "view",
+          type: "function",
+        },
+        {
+          inputs: [
+            { internalType: "uint256", name: "tokenId", type: "uint256" },
+          ],
+          name: "requests",
+          outputs: [
+            { internalType: "string", name: "emojis", type: "string" },
+            { internalType: "string", name: "text", type: "string" },
+            { internalType: "address", name: "token", type: "address" },
+            { internalType: "uint256", name: "amount", type: "uint256" },
+            {
+              internalType: "enum bounty.Status",
+              name: "status",
+              type: "uint8",
+            },
+            { internalType: "address", name: "watcher", type: "address" },
+          ],
+          stateMutability: "view",
+          type: "function",
+        },
+      ];
+
+      const COMMAND_CONTRACT = "0x1e4FE500980000D7679EcE0000D000B49E740493";
+      const COMMAND_ABI = [
+        {
+          inputs: [{ internalType: "string", name: "command", type: "string" }],
+          name: "command",
+          outputs: [{ internalType: "bytes32", name: "", type: "bytes32" }],
+          stateMutability: "nonpayable",
+          type: "function",
+        },
+      ];
+
+      let contract;
+      let signer;
+      let provider;
+
+      // Helper function to convert normal numbers to wei (multiply by 10^18)
+      function toWei(amount) {
+        return ethers.parseUnits(amount.toString(), 18);
+      }
+
+      window.connectWallet = async function () {
+        if (typeof window.ethereum === "undefined") {
+          alert("Please install MetaMask!");
+          return;
+        }
+
+        try {
+          const chainId = await window.ethereum.request({
+            method: "eth_chainId",
+          });
+          if (chainId !== "0x2105") {
+            await window.ethereum.request({
+              method: "wallet_switchEthereumChain",
+              params: [{ chainId: "0x2105" }],
+            });
+          }
+
+          provider = new ethers.BrowserProvider(window.ethereum);
+          signer = await provider.getSigner();
+          const address = await signer.getAddress();
+          document.getElementById(
+            "walletAddress"
+          ).textContent = `Connected: ${address}`;
+
+          document.getElementById("connectWallet").style.display = "none";
+
+          contract = new ethers.Contract(
+            CONTRACT_ADDRESS,
+            CONTRACT_ABI,
+            signer
+          );
+          await loadBounties();
+        } catch (error) {
+          console.error(error);
+          alert("Failed to connect wallet");
+        }
+      };
+
+      window.proposeBounty = async function () {
+        const emojis = document.getElementById("proposeEmojis").value;
+        const text = document.getElementById("proposeText").value;
+
+        if (text.length > 50) {
+          alert("Description must be 50 characters or less");
+          return;
+        }
+
+        try {
+          const tx = await contract.propose(emojis, text);
+          await tx.wait();
+          alert("Bounty proposed successfully!");
+          await loadBounties();
+        } catch (error) {
+          console.error(error);
+          alert("Failed to propose bounty");
+        }
+      };
+
+      window.requestBounty = async function () {
+        const emojis = document.getElementById("requestEmojis").value;
+        const text = document.getElementById("requestText").value;
+        const amount = document.getElementById("amount").value;
+        const watcher = document.getElementById("watcherAddress").value;
+
+        if (text.length > 50) {
+          alert("Description must be 50 characters or less");
+          return;
+        }
+
+        // Create status display element
+        const statusDiv = document.createElement("div");
+        statusDiv.style.cssText = `
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        z-index: 1000;
+        text-align: center;
+    `;
+        document.body.appendChild(statusDiv);
+
+        try {
+          const amountInWei = toWei(amount);
+
+          // Create bounty
+          statusDiv.innerHTML = `<p>Please confirm the bounty creation...</p>`;
+          const tx = await contract.request(
+            emojis,
+            text,
+            NANI_TOKEN_ADDRESS,
+            amountInWei,
+            watcher
+          );
+          statusDiv.innerHTML = `<p>Creating bounty... Please wait.</p>`;
+          const receipt = await tx.wait();
+
+          const tokenId = receipt.logs[0].args[0];
+
+          // Create command contract instance
+          const commandContract = new ethers.Contract(
+            COMMAND_CONTRACT,
+            COMMAND_ABI,
+            signer
+          );
+
+          // Format command string
+          const commandString = `order ${amount} nani for ${tokenId} bounty`;
+
+          statusDiv.innerHTML = `<p>Please confirm the command transaction...</p>`;
+          const commandTx = await commandContract.command(commandString);
+
+          statusDiv.innerHTML = `<p>Finalizing... Please wait.</p>`;
+          const commandReceipt = await commandTx.wait();
+
+          statusDiv.innerHTML = `
+            <h3>Success! ✅</h3>
+            <p>Bounty created and command executed</p>
+            <button onclick="this.parentElement.remove()">Close</button>
+        `;
+
+          await loadBounties();
+        } catch (error) {
+          console.error(error);
+          alert("Failed to create bounty");
+        }
+      };
+
+      async function loadBounties() {
+        try {
+          const bounties = await contract.read();
+          const container = document.getElementById("bountyContainer");
+          container.innerHTML = "";
+
+          // Reverse the bounties array to show newest first
+          const reversedBounties = [...bounties].reverse();
+
+          for (const tokenId of reversedBounties) {
+            const bounty = await contract.requests(tokenId);
+            const div = document.createElement("div");
+            div.className = "bounty-item";
+
+            // Format amount from wei to regular number
+            const formattedAmount = ethers.formatUnits(bounty.amount, 18);
+
+            div.innerHTML = `
+              <p>Emojis: ${bounty.emojis}</p>
+              <p>Description: ${bounty.text}</p>
+              <p>Amount: ${formattedAmount} NANI</p>
+              <p>Status: ${
+                ["None", "Pending", "Rejected", "Approved", "Completed"][
+                  bounty.status
+                ]
+              }</p>
+              ${
+                bounty.status === 3
+                  ? `<button onclick="completeBounty('${tokenId}')" class="button">Complete Bounty</button>`
+                  : ""
+              }
+            `;
+            container.appendChild(div);
+          }
+        } catch (error) {
+          console.error(error);
+        }
+      }
+      document.addEventListener("DOMContentLoaded", () => {
+        // Helper function to check if a string contains only emojis
+        function containsOnlyEmojis(text) {
+          const emojiRegex =
+            /^[\p{Emoji}\p{Emoji_Presentation}\p{Emoji_Modifier}\p{Emoji_Component}]+$/u;
+          return emojiRegex.test(text);
+        }
+
+        // Function to clean input, removing non-emoji characters
+        function cleanEmojiInput(input) {
+          const chars = [...input];
+          return chars.filter((char) => containsOnlyEmojis(char)).join("");
+        }
+
+        // Add input validation to emoji fields
+        ["proposeEmojis", "requestEmojis"].forEach((id) => {
+          const input = document.getElementById(id);
+          input.addEventListener("input", (e) => {
+            const cleanedValue = cleanEmojiInput(e.target.value);
+            if (e.target.value !== cleanedValue) {
+              e.target.value = cleanedValue;
+              alert("Only emoji characters are allowed in this field");
+            }
+          });
+
+          // Prevent paste of non-emoji characters
+          input.addEventListener("paste", (e) => {
+            e.preventDefault();
+            const pastedText = (
+              e.clipboardData || window.clipboardData
+            ).getData("text");
+            const cleanedValue = cleanEmojiInput(pastedText);
+            if (cleanedValue.length > 0) {
+              const newValue = (input.value + cleanedValue).slice(0, 6);
+              input.value = newValue;
+            }
+          });
+        });
+
+        // Add character counters for description fields
+        ["proposeText", "requestText"].forEach((id) => {
+          const textarea = document.getElementById(id);
+          const counter = document.getElementById(id + "Counter");
+
+          // Initial count
+          counter.textContent = textarea.value.length;
+
+          // Update on input
+          textarea.addEventListener("input", () => {
+            counter.textContent = textarea.value.length;
+          });
+        });
+
+        // Basic event listeners
+        document
+          .getElementById("connectWallet")
+          .addEventListener("click", window.connectWallet);
+        document
+          .getElementById("proposeButton")
+          .addEventListener("click", window.proposeBounty);
+        document
+          .getElementById("requestButton")
+          .addEventListener("click", window.requestBounty);
+
+        // Emoji picker functionality
+        document.querySelectorAll(".emoji-trigger").forEach((trigger) => {
+          trigger.addEventListener("click", (e) => {
+            const picker = e.target.nextElementSibling;
+            picker.style.display =
+              picker.style.display === "none" ? "block" : "none";
+          });
+        });
+
+        document.querySelectorAll("emoji-picker").forEach((picker) => {
+          picker.addEventListener("emoji-click", (event) => {
+            const emoji = event.detail.unicode;
+            const input = picker.parentElement.querySelector("input");
+            const currentValue = input.value;
+            if (currentValue.length + emoji.length <= 10) {
+              input.value += emoji;
+            }
+            picker.style.display = "none";
+          });
+        });
+
+        // Close emoji picker when clicking outside
+        document.addEventListener("click", (e) => {
+          if (!e.target.closest(".emoji-input-container")) {
+            document.querySelectorAll("emoji-picker").forEach((picker) => {
+              picker.style.display = "none";
+            });
+          }
+        });
+
+        // Role toggle functionality
+        document.querySelectorAll('input[name="role"]').forEach((radio) => {
+          radio.addEventListener("change", (e) => {
+            document.getElementById("proposerForm").style.display =
+              e.target.value === "proposer" ? "block" : "none";
+            document.getElementById("adminForm").style.display =
+              e.target.value === "admin" ? "block" : "none";
+          });
+        });
+      });
+    </script>
+  </body>
+</html>
